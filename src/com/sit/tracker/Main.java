@@ -5,31 +5,31 @@ import com.sit.tracker.model.AssetStatus;
 import com.sit.tracker.model.Ticket;
 import com.sit.tracker.model.TicketStatus;
 import com.sit.tracker.model.Urgency;
+import com.sit.tracker.repository.DataStore;
+import com.sit.tracker.repository.Repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
 /**
  * Console front-end for the SIT Equipment Maintenance Tracker.
  *
- * The domain classes now live in the {@link com.sit.tracker.model} package and
- * are imported from here; this class still owns the data lists itself
- * (a proper storage layer comes next) and keeps the seed data inline.
+ * All data now lives behind the {@link Repository} abstraction in
+ * {@link DataStore} — this class no longer keeps its own lists or mints its
+ * own ids; it reads and saves entities through the store like any other
+ * client would. Swapping in a real database later means writing one new
+ * Repository implementation, not touching this code.
  */
 public class Main {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    // ------------------------------------------------------------- data (still owned here)
+    private static final DataStore store = new DataStore();
 
-    private static final List<Asset> assets = new ArrayList<>();
-    private static final List<Ticket> tickets = new ArrayList<>();
-    private static int assetCounter = 0;
-    private static int ticketCounter = 0;
+    // ------------------------------------------------------------- seed data
 
     private static void seed() {
         addAsset("SN-ELO-1145", "Digital Oscilloscope", "Electronics", "A", "204",
@@ -54,43 +54,25 @@ public class Main {
         addTicket("AST-004", Urgency.CRITICAL, "Workstation 1 fails to boot",
                 "No POST; power LED blinks three times.",
                 "Chala Gudeta", LocalDateTime.now().minusDays(6));
-        tickets.get(2).setStatus(TicketStatus.RESOLVED);
-        tickets.get(2).setResolvedAt(LocalDateTime.now().minusDays(5));
+        store.tickets().findAll().get(2).setStatus(TicketStatus.RESOLVED);
+        store.tickets().findAll().get(2).setResolvedAt(LocalDateTime.now().minusDays(5));
 
-        System.out.println("[DEBUG] seeded " + assets.size() + " assets and "
-                + tickets.size() + " tickets");
+        System.out.println("[DEBUG] seeded " + store.assets().count() + " assets and "
+                + store.tickets().count() + " tickets");
     }
 
     private static void addAsset(String serial, String name, String category,
                                  String building, String room, AssetStatus status, LocalDate purchased) {
-        assetCounter++;
-        assets.add(new Asset(String.format("AST-%03d", assetCounter), serial, name,
-                category, building, room, status, purchased));
+        Asset asset = new Asset(store.nextId("AST"), serial, name, category, building, room,
+                status, purchased);
+        store.assets().save(asset);
     }
 
-    private static void addTicket(String assetId, Urgency urgency, String title,
-                                  String description, String reportedBy, LocalDateTime createdAt) {
-        ticketCounter++;
-        tickets.add(new Ticket(String.format("TKT-%03d", ticketCounter), assetId, urgency,
-                title, description, reportedBy, createdAt));
-    }
-
-    private static Asset findAsset(String id) {
-        for (Asset a : assets) {
-            if (a.getId().equalsIgnoreCase(id)) {
-                return a;
-            }
-        }
-        return null;
-    }
-
-    private static Ticket findTicket(String id) {
-        for (Ticket t : tickets) {
-            if (t.getId().equalsIgnoreCase(id)) {
-                return t;
-            }
-        }
-        return null;
+    private static Ticket addTicket(String assetId, Urgency urgency, String title,
+                                    String description, String reportedBy, LocalDateTime createdAt) {
+        Ticket ticket = new Ticket(store.nextId("TKT"), assetId, urgency, title,
+                description, reportedBy, createdAt);
+        return store.tickets().save(ticket);
     }
 
     // ------------------------------------------------------------- UI
@@ -149,7 +131,8 @@ public class Main {
                     System.out.println();
                     System.out.println("=== Asset Inventory ===");
                     System.out.printf("%-9s %-27s %-7s %-18s%n", "ID", "Name", "Room", "Status");
-                    for (Asset a : assets) {
+                    List<Asset> all = store.assets().findAll();
+                    for (Asset a : all) {
                         System.out.printf("%-9s %-27s %-7s %-18s%n",
                                 a.getId(), a.getName(), a.getRoomLabel(), a.getStatus().getLabel());
                     }
@@ -159,7 +142,7 @@ public class Main {
                     System.out.println("=== Report a Fault ===");
                     String name = askRequired("Your name:");
                     String assetId = askRequired("Asset id (e.g. AST-001):");
-                    Asset asset = findAsset(assetId);
+                    Asset asset = store.assets().findById(assetId.trim().toUpperCase()).orElse(null);
                     if (asset == null) {
                         System.out.println("  ! No asset with id " + assetId);
                         break;
@@ -169,19 +152,20 @@ public class Main {
                     Urgency urgency = Urgency.values()[u - 1];
                     String title = askRequired("Short title:");
                     String description = askRequired("Description of the fault:");
-                    Ticket t = addTicketAndReturn(asset.getId(), urgency, title, description,
+                    Ticket t = addTicket(asset.getId(), urgency, title, description,
                             name, LocalDateTime.now());
                     asset.setStatus(AssetStatus.FAULTY);
+                    store.assets().save(asset);
                     System.out.println("  > Ticket " + t.getId() + " created with status: Reported.");
                     System.out.println("  > Asset " + asset.getId() + " was flagged as Faulty.");
-                    System.out.println("[DEBUG] tickets in list now: " + tickets.size());
+                    System.out.println("[DEBUG] tickets in store now: " + store.tickets().count());
                 }
                 case 3 -> {
                     System.out.println();
                     System.out.println("=== Fault Tickets ===");
                     System.out.printf("%-9s %-9s %-10s %-16s %-16s %s%n",
                             "ID", "Asset", "Urgency", "Status", "Reported by", "Created", "Title");
-                    for (Ticket t : tickets) {
+                    for (Ticket t : store.tickets().findAll()) {
                         System.out.printf("%-9s %-9s %-10s %-16s %-16s %s%n",
                                 t.getId(), t.getAssetId(), t.getUrgency().getLabel(),
                                 t.getStatus().getLabel(), t.getReportedBy(),
@@ -192,7 +176,7 @@ public class Main {
                     System.out.println();
                     System.out.println("=== Resolve a Ticket ===");
                     String id = askRequired("Ticket id (e.g. TKT-002):");
-                    Ticket t = findTicket(id);
+                    Ticket t = store.tickets().findById(id.trim().toUpperCase()).orElse(null);
                     if (t == null) {
                         System.out.println("  ! No ticket with id " + id);
                         break;
@@ -203,6 +187,7 @@ public class Main {
                     }
                     t.setStatus(TicketStatus.RESOLVED);
                     t.setResolvedAt(LocalDateTime.now());
+                    store.tickets().save(t);
                     System.out.println("  > Ticket " + t.getId() + " resolved at "
                             + t.getResolvedAt().format(TS) + ".");
                 }
@@ -212,15 +197,5 @@ public class Main {
                 }
             }
         }
-    }
-
-    private static Ticket addTicketAndReturn(String assetId, Urgency urgency, String title,
-                                             String description, String reportedBy,
-                                             LocalDateTime createdAt) {
-        ticketCounter++;
-        Ticket t = new Ticket(String.format("TKT-%03d", ticketCounter), assetId, urgency,
-                title, description, reportedBy, createdAt);
-        tickets.add(t);
-        return t;
     }
 }

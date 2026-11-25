@@ -1,16 +1,18 @@
 package com.sit.tracker.model;
 
+import com.sit.tracker.repository.Identifiable;
+
 import java.time.LocalDate;
 
 /**
  * A laboratory asset in the institute's inventory.
  *
- * <p>Every asset carries a serial number, a room location and an operational
- * status. The QR payload is the text that is encoded in the QR label stuck on
- * the physical device; scanning the label with any QR reader yields this
+ * <p>Every asset carries a serial number, a room location, an operational
+ * status and a QR payload — the text that is encoded in the QR label stuck on
+ * the physical device. Scanning the label with any QR reader yields this
  * payload, which the app uses to look the asset up by id.</p>
  */
-public class Asset {
+public class Asset implements Identifiable<String> {
     private final String id;            // e.g. AST-001
     private final String serialNumber;  // manufacturer serial / institute tag
     private final String name;          // e.g. "Digital Oscilloscope"
@@ -32,6 +34,7 @@ public class Asset {
         this.purchaseDate = purchaseDate;
     }
 
+    @Override
     public String getId() {
         return id;
     }

@@ -1,12 +1,15 @@
 package com.sit.tracker.model;
 
+import com.sit.tracker.repository.Identifiable;
+
 import java.time.LocalDateTime;
 
 /**
  * A fault-report ticket raised against an asset, with the reporter recorded
  * as a plain name (proper user accounts arrive with the auth layer later).
+ * Now stored in a repository, so it exposes its id via {@link Identifiable}.
  */
-public class Ticket {
+public class Ticket implements Identifiable<String> {
     private final String id;              // e.g. TKT-001
     private final String assetId;
     private final Urgency urgency;
@@ -29,6 +32,7 @@ public class Ticket {
         this.createdAt = createdAt;
     }
 
+    @Override
     public String getId() {
         return id;
     }
