@@ -2,6 +2,8 @@ package com.sit.tracker.repository;
 
 import com.sit.tracker.model.Asset;
 import com.sit.tracker.model.AuditLog;
+import com.sit.tracker.model.MaintenancePlan;
+import com.sit.tracker.model.MaintenanceRecord;
 import com.sit.tracker.model.Ticket;
 
 import java.util.HashMap;
@@ -17,6 +19,8 @@ public class DataStore {
 
     private final Repository<String, Asset> assets = new InMemoryRepository<>();
     private final Repository<String, Ticket> tickets = new InMemoryRepository<>();
+    private final Repository<String, MaintenancePlan> plans = new InMemoryRepository<>();
+    private final Repository<String, MaintenanceRecord> maintenanceRecords = new InMemoryRepository<>();
     private final Repository<String, AuditLog> auditLogs = new InMemoryRepository<>();
 
     private final Map<String, Integer> idCounters = new HashMap<>();
@@ -33,6 +37,14 @@ public class DataStore {
 
     public Repository<String, Ticket> tickets() {
         return tickets;
+    }
+
+    public Repository<String, MaintenancePlan> plans() {
+        return plans;
+    }
+
+    public Repository<String, MaintenanceRecord> maintenanceRecords() {
+        return maintenanceRecords;
     }
 
     public Repository<String, AuditLog> auditLogs() {

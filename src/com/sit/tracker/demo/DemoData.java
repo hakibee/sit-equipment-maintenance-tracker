@@ -2,6 +2,9 @@ package com.sit.tracker.demo;
 
 import com.sit.tracker.model.Asset;
 import com.sit.tracker.model.AssetStatus;
+import com.sit.tracker.model.MaintenancePlan;
+import com.sit.tracker.model.MaintenanceRecord;
+import com.sit.tracker.model.MaintenanceType;
 import com.sit.tracker.model.Ticket;
 import com.sit.tracker.model.TicketStatus;
 import com.sit.tracker.model.Urgency;
@@ -13,10 +16,11 @@ import java.time.LocalDateTime;
 
 /**
  * Seeds the in-memory demo database with a realistic slice of SIT laboratory
- * life: twelve assets across five lab rooms and eight tickets in various
- * workflow stages. Reporters and assignees are plain names until proper user
- * accounts exist. All timestamps are relative to the moment the app starts,
- * so reports (MTTR, overdue plans) always show meaningful numbers.
+ * life: twelve assets across five lab rooms, eight tickets in various
+ * workflow stages, five maintenance cycles and a service history. Reporters,
+ * assignees and technicians are plain names until proper user accounts exist.
+ * All timestamps are relative to the moment the app starts, so the reports
+ * (MTTR, overdue plans) always show meaningful numbers.
  */
 public final class DemoData {
 
@@ -27,9 +31,11 @@ public final class DemoData {
     public static void seed(DataStore store) {
         seedAssets(store);
         seedTickets(store);
+        seedPlans(store);
+        seedMaintenanceHistory(store);
 
         new AuditService(store).log("SYSTEM", "SYSTEM", "DEMO_SEED", "SYSTEM", "-",
-                "Seeded demo dataset: 12 assets, 8 tickets");
+                "Seeded demo dataset: 12 assets, 8 tickets, 5 plans");
     }
 
     // ------------------------------------------------------------------ assets
@@ -144,5 +150,58 @@ public final class DemoData {
         ticket.setStatus(status);
         ticket.addHistory("Demo seed: " + String.join("; ", historyLines));
         store.tickets().save(ticket);
+    }
+
+    // ------------------------------------------------------------------ plans
+
+    private static void seedPlans(DataStore store) {
+        LocalDate today = LocalDate.now();
+        savePlan(store, "AST-001", "Calibration verification against reference signal",
+                180, today.minusDays(30), today.plusDays(150));
+        savePlan(store, "AST-004", "Preventive cleaning and dust check",
+                90, today.minusDays(100), today.minusDays(10));   // overdue
+        savePlan(store, "AST-009", "Rotor inspection and balancing",
+                60, today.minusDays(50), today.plusDays(10));
+        savePlan(store, "AST-011", "Lubrication of ways and chuck check",
+                30, today.minusDays(45), today.minusDays(15));    // overdue
+        savePlan(store, "AST-010", "Deuterium lamp intensity check",
+                120, today.minusDays(20), today.plusDays(100));
+    }
+
+    private static void savePlan(DataStore store, String assetId, String task,
+                                 int intervalDays, LocalDate lastService, LocalDate nextDue) {
+        store.plans().save(new MaintenancePlan(store.nextId("PLN"), assetId, task,
+                intervalDays, lastService, nextDue));
+    }
+
+    // ------------------------------------------------------------------ history
+
+    private static void seedMaintenanceHistory(DataStore store) {
+        LocalDate today = LocalDate.now();
+        saveRecord(store, "AST-004", "Dawit Alemu", today.minusDays(5), MaintenanceType.REPAIR,
+                "Replaced failed PSU and reseated RAM modules", 3.0);
+        saveRecord(store, "AST-009", "Tigist Hailu", today.minusDays(8), MaintenanceType.REPAIR,
+                "Rebalanced rotor, replaced worn damper", 4.5);
+        saveRecord(store, "AST-010", "Dawit Alemu", today.minusDays(18), MaintenanceType.REPAIR,
+                "Replaced deuterium lamp, recalibrated wavelength", 2.0);
+        saveRecord(store, "AST-001", "Tigist Hailu", today.minusDays(30), MaintenanceType.CALIBRATION,
+                "Annual calibration verification against reference signal", 1.5);
+        saveRecord(store, "AST-011", "Tigist Hailu", today.minusDays(45), MaintenanceType.PLANNED_SERVICE,
+                "Lubrication of ways and chuck", 2.0);
+        saveRecord(store, "AST-004", "Dawit Alemu", today.minusDays(100), MaintenanceType.PLANNED_SERVICE,
+                "Internal cleaning, thermal paste check", 1.0);
+        saveRecord(store, "AST-009", "Tigist Hailu", today.minusDays(50), MaintenanceType.INSPECTION,
+                "Pre-semester safety inspection", 1.0);
+        saveRecord(store, "AST-007", "Dawit Alemu", today.minusDays(25), MaintenanceType.PLANNED_SERVICE,
+                "Optics cleaning and alignment", 0.5);
+        saveRecord(store, "AST-008", "Tigist Hailu", today.minusDays(60), MaintenanceType.CALIBRATION,
+                "Multimeter calibration check", 0.5);
+    }
+
+    private static void saveRecord(DataStore store, String assetId, String technician,
+                                   LocalDate date, MaintenanceType type, String description,
+                                   double hours) {
+        store.maintenanceRecords().save(new MaintenanceRecord(store.nextId("REC"), assetId,
+                technician, date, type, description, hours));
     }
 }
