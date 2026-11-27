@@ -1,7 +1,11 @@
 package com.sit.tracker.service;
 
-import com.sit.tracker.model.Asset;
+import com.sit.tracker.auth.AccessControl;
+import com.sit.tracker.auth.AccessDeniedException;
+import com.sit.tracker.auth.Session;
 import com.sit.tracker.model.AssetStatus;
+import com.sit.tracker.model.Permission;
+import com.sit.tracker.model.Role;
 import com.sit.tracker.model.Ticket;
 import com.sit.tracker.model.TicketStatus;
 import com.sit.tracker.model.Urgency;
@@ -17,9 +21,8 @@ import java.util.Set;
 
 /**
  * Fault-report ticket workflow: reporting, assignment, status transitions
- * (Reported -> Under Review -> In Repair -> Resolved, reopen supported) and
- * notes. The lifecycle guard lives here so no caller can put a ticket into
- * an illegal state. (Permission checks arrive with the auth layer.)
+ * (Reported -> Under Review -> In Repair -> Resolved, reopen supported),
+ * notes and per-role visibility.
  */
 public class TicketService {
 
@@ -55,10 +58,12 @@ public class TicketService {
         this.tickets = store.tickets();
     }
 
-    /** File a new fault report. The asset is flagged FAULTY. */
-    public Ticket reportFault(String reporterName, String assetId, Urgency urgency,
-                              String title, String description) {
-        Asset asset = assetService.findById(assetId)
+    /** File a new fault report (any logged-in role). The asset is flagged FAULTY. */
+    public Ticket reportFault(Session session, String assetId, Urgency urgency,
+                              String title, String description) throws AccessDeniedException {
+        AccessControl.check(session, Permission.REPORT_FAULT);
+
+        var asset = assetService.findById(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("No asset with id " + assetId));
         if (asset.getStatus() == AssetStatus.RETIRED) {
             throw new IllegalArgumentException(asset.getId() + " (" + asset.getName()
@@ -66,44 +71,75 @@ public class TicketService {
         }
 
         Ticket ticket = new Ticket(store.nextId("TKT"), asset.getId(), urgency,
-                title.trim(), description.trim(), reporterName.trim(), LocalDateTime.now());
+                title.trim(), description.trim(), session.currentUser().getId(), LocalDateTime.now());
         tickets.save(ticket);
 
-        assetService.markFaultyInternal(reporterName, asset.getId());
-        audit.log(reporterName, "Staff", "TICKET_REPORTED", "TICKET", ticket.getId(),
+        assetService.markFaultyInternal(session, asset.getId());
+        audit.log(session, "TICKET_REPORTED", "TICKET", ticket.getId(),
                 asset.getId() + " (" + asset.getName() + "): " + urgency.getLabel() + " - " + ticket.getTitle());
         return ticket;
     }
 
-    /** All tickets, oldest first. */
-    public List<Ticket> allTickets() {
+    /** Tickets reported by the current user. */
+    public List<Ticket> myTickets(Session session) throws AccessDeniedException {
+        AccessControl.check(session, Permission.VIEW_OWN_TICKETS);
+        String me = session.currentUser().getId();
+        return tickets.findAll().stream()
+                .filter(t -> t.getReportedById().equals(me))
+                .toList();
+    }
+
+    /** All tickets (technicians and administrators). */
+    public List<Ticket> allTickets(Session session) throws AccessDeniedException {
+        AccessControl.check(session, Permission.VIEW_ALL_TICKETS);
         return tickets.findAll();
     }
 
     /** Open (not resolved) tickets, oldest first. */
-    public List<Ticket> openTickets() {
+    public List<Ticket> openTickets(Session session) throws AccessDeniedException {
+        AccessControl.check(session, Permission.VIEW_ALL_TICKETS);
         return tickets.findAll().stream()
                 .filter(t -> t.getStatus() != TicketStatus.RESOLVED)
                 .toList();
     }
 
-    /** Load one ticket (case-insensitive id). */
-    public Ticket viewTicket(String ticketId) {
-        return tickets.findById(ticketId.trim().toUpperCase())
+    /**
+     * Load one ticket with role-based visibility: anyone may see their own
+     * tickets; viewing others' requires VIEW_ALL_TICKETS.
+     */
+    public Ticket viewTicket(Session session, String ticketId) throws AccessDeniedException {
+        Ticket ticket = tickets.findById(ticketId.trim().toUpperCase())
                 .orElseThrow(() -> new IllegalArgumentException("No ticket with id " + ticketId));
+
+        String me = session.currentUser().getId();
+        if (!ticket.getReportedById().equals(me)) {
+            AccessControl.check(session, Permission.VIEW_ALL_TICKETS);
+        }
+        return ticket;
     }
 
-    /** Assign a ticket to a technician (recorded by name until users exist). */
-    public Ticket assign(String ticketId, String technicianName) {
-        Ticket ticket = viewTicket(ticketId);
+    /** Assign a ticket to a technician (technicians and administrators). */
+    public Ticket assign(Session session, String ticketId, String technicianId)
+            throws AccessDeniedException {
+        AccessControl.check(session, Permission.ASSIGN_TICKETS);
+
+        Ticket ticket = tickets.findById(ticketId.trim().toUpperCase())
+                .orElseThrow(() -> new IllegalArgumentException("No ticket with id " + ticketId));
         if (ticket.getStatus() == TicketStatus.RESOLVED) {
             throw new IllegalStateException("Ticket " + ticket.getId() + " is already resolved; reopen it first.");
         }
 
-        ticket.setAssignedTo(technicianName.trim());
-        ticket.addHistory("Assigned to " + technicianName.trim());
-        audit.log("SYSTEM", "Staff", "TICKET_ASSIGNED", "TICKET", ticket.getId(),
-                "Assigned to " + technicianName.trim());
+        var technician = store.users().findById(technicianId.trim().toUpperCase())
+                .orElseThrow(() -> new IllegalArgumentException("No user with id " + technicianId));
+        if (technician.getRole() != Role.TECHNICIAN) {
+            throw new IllegalArgumentException(technician.getDisplayName()
+                    + " is not a technician; tickets can only be assigned to technicians.");
+        }
+
+        ticket.setAssignedToId(technician.getId());
+        ticket.addHistory("Assigned to " + technician.getDisplayName());
+        audit.log(session, "TICKET_ASSIGNED", "TICKET", ticket.getId(),
+                "Assigned to " + technician.getDisplayName());
         return ticket;
     }
 
@@ -111,8 +147,12 @@ public class TicketService {
      * Move a ticket to another status with a mandatory note, enforcing the
      * lifecycle defined in {@link #ALLOWED_TRANSITIONS}.
      */
-    public Ticket transition(String ticketId, TicketStatus target, String note) {
-        Ticket ticket = viewTicket(ticketId);
+    public Ticket transition(Session session, String ticketId, TicketStatus target, String note)
+            throws AccessDeniedException {
+        AccessControl.check(session, Permission.UPDATE_TICKET_STATUS);
+
+        Ticket ticket = tickets.findById(ticketId.trim().toUpperCase())
+                .orElseThrow(() -> new IllegalArgumentException("No ticket with id " + ticketId));
 
         TicketStatus current = ticket.getStatus();
         Set<TicketStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(current, Set.of());
@@ -130,16 +170,18 @@ public class TicketService {
         }
         ticket.addHistory(String.format("Status: %s -> %s (%s)",
                 current.getLabel(), target.getLabel(), note == null || note.isBlank() ? "no note" : note.trim()));
-        audit.log("SYSTEM", "Staff", "TICKET_STATUS_CHANGED", "TICKET", ticket.getId(),
+        audit.log(session, "TICKET_STATUS_CHANGED", "TICKET", ticket.getId(),
                 current.getLabel() + " -> " + target.getLabel());
         return ticket;
     }
 
-    /** Add a working note to a ticket. */
-    public Ticket addNote(String ticketId, String authorName, String note) {
-        Ticket ticket = viewTicket(ticketId);
-        ticket.addHistory("Note (" + authorName.trim() + "): " + note.trim());
-        audit.log("SYSTEM", "Staff", "TICKET_NOTE_ADDED", "TICKET", ticket.getId(), note.trim());
+    /** Add a working note to a ticket (technicians and administrators). */
+    public Ticket addNote(Session session, String ticketId, String note) throws AccessDeniedException {
+        AccessControl.check(session, Permission.ADD_TICKET_NOTE);
+
+        Ticket ticket = viewTicket(session, ticketId);
+        ticket.addHistory("Note (" + session.currentUser().getDisplayName() + "): " + note.trim());
+        audit.log(session, "TICKET_NOTE_ADDED", "TICKET", ticket.getId(), note.trim());
         return ticket;
     }
 }

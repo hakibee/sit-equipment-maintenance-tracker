@@ -3,10 +3,12 @@ package com.sit.tracker.model;
 import com.sit.tracker.repository.Identifiable;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
- * A fault-report ticket raised against an asset, with the reporter recorded
- * as a plain name (proper user accounts arrive with the auth layer later).
+ * A fault-report ticket raised against an asset.
  *
  * <p>The ticket keeps its own running history (status changes, assignments and
  * notes) which is displayed when working the ticket; institute-wide audit
@@ -18,21 +20,21 @@ public class Ticket implements Identifiable<String> {
     private final Urgency urgency;
     private final String title;
     private final String description;
-    private final String reportedBy;      // plain name for now
-    private String assignedTo;            // plain name, null until assigned
+    private final String reportedById;    // User.id
+    private String assignedToId;          // User.id of technician, null until assigned
     private TicketStatus status;
     private final LocalDateTime createdAt;
     private LocalDateTime resolvedAt;     // null until resolved; used for MTTR
-    private final java.util.List<String> history = new java.util.ArrayList<>();
+    private final List<String> history = new ArrayList<>();
 
     public Ticket(String id, String assetId, Urgency urgency, String title,
-                  String description, String reportedBy, LocalDateTime createdAt) {
+                  String description, String reportedById, LocalDateTime createdAt) {
         this.id = id;
         this.assetId = assetId;
         this.urgency = urgency;
         this.title = title;
         this.description = description;
-        this.reportedBy = reportedBy;
+        this.reportedById = reportedById;
         this.status = TicketStatus.REPORTED;
         this.createdAt = createdAt;
         // build the initial history entry directly (constructors must not call
@@ -62,16 +64,16 @@ public class Ticket implements Identifiable<String> {
         return description;
     }
 
-    public String getReportedBy() {
-        return reportedBy;
+    public String getReportedById() {
+        return reportedById;
     }
 
-    public String getAssignedTo() {
-        return assignedTo;
+    public String getAssignedToId() {
+        return assignedToId;
     }
 
-    public void setAssignedTo(String assignedTo) {
-        this.assignedTo = assignedTo;
+    public void setAssignedToId(String assignedToId) {
+        this.assignedToId = assignedToId;
     }
 
     public TicketStatus getStatus() {
@@ -101,7 +103,7 @@ public class Ticket implements Identifiable<String> {
     }
 
     /** Immutable view of the ticket history, oldest first. */
-    public java.util.List<String> getHistory() {
-        return java.util.Collections.unmodifiableList(history);
+    public List<String> getHistory() {
+        return Collections.unmodifiableList(history);
     }
 }

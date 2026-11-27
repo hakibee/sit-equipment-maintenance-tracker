@@ -2,6 +2,7 @@ package com.sit.tracker.ui;
 
 import com.sit.tracker.service.AssetService;
 import com.sit.tracker.service.AuditService;
+import com.sit.tracker.service.AuthService;
 import com.sit.tracker.service.MaintenanceService;
 import com.sit.tracker.service.ReportService;
 import com.sit.tracker.service.TicketService;
@@ -11,6 +12,7 @@ import com.sit.tracker.service.TicketService;
  * wiring in one immutable record.
  */
 public record AppContext(
+        AuthService auth,
         AssetService assets,
         TicketService tickets,
         MaintenanceService maintenance,

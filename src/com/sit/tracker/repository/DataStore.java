@@ -5,6 +5,7 @@ import com.sit.tracker.model.AuditLog;
 import com.sit.tracker.model.MaintenancePlan;
 import com.sit.tracker.model.MaintenanceRecord;
 import com.sit.tracker.model.Ticket;
+import com.sit.tracker.model.User;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,6 +18,7 @@ import java.util.Map;
  */
 public class DataStore {
 
+    private final Repository<String, User> users = new InMemoryRepository<>();
     private final Repository<String, Asset> assets = new InMemoryRepository<>();
     private final Repository<String, Ticket> tickets = new InMemoryRepository<>();
     private final Repository<String, MaintenancePlan> plans = new InMemoryRepository<>();
@@ -29,6 +31,10 @@ public class DataStore {
     public synchronized String nextId(String prefix) {
         int n = idCounters.merge(prefix, 1, Integer::sum);
         return String.format("%s-%03d", prefix, n);
+    }
+
+    public Repository<String, User> users() {
+        return users;
     }
 
     public Repository<String, Asset> assets() {
