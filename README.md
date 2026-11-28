@@ -191,16 +191,13 @@ maintenance dates are relative to the moment the app starts.
 
 ---
 
-## Build-up history (6 commits)
+## Developers
 
-The repository tells the design story in six steps. Each commit compiles and
-runs on its own, so you can check out any point in the history:
-
-| # | Commit | What changed |
+| # | Full Name | ID |
 |---|--------|--------------|
-| 1 | `Add single-file console prototype (Main.java)` | Everything — data, logic, menus — in one default-package `Main.java` with hardcoded demo data and `[DEBUG]` prints. |
-| 2 | `Extract domain model into the com.sit.tracker.model package` | `Asset`, `Ticket` and their enums move into `src/com/sit/tracker/model/` and are imported from the console class; the single root file is deleted; `run.sh` / `run.bat` added. |
-| 3 | `Classify storage: move all data behind a repository package` | New `repository/` package (`Repository` interface, thread-safe `InMemoryRepository`, `DataStore` with human-readable ids); entities implement `Identifiable`; Main keeps no lists or id counters of its own. |
-| 4 | `Add service layer, audit trail and seeded demo data` | Business rules (fault reporting with auto-flag, guarded ticket lifecycle, assignment, notes) move from the console class into `service/`; every change is audited; `demo/DemoData` replaces hardcoded seed lists. |
-| 5 | `Add maintenance scheduling, MTTR reports and the ui package` | Recurring maintenance plans with due/overdue tracking and service history; `ReportService` (MTTR, open-ticket stats); input handling and menus extracted into `ui/` (`ConsoleIO`, `AppUI`, `AppContext`). |
-| 6 | `Add login with role-based access control; remove debug leftovers` | `User`/`Role`/`Permission` and the `auth/` RBAC matrix; login screen and role-filtered menus; services enforce permissions again underneath; built-in 27-check self-test; README and VS Code configs; `[DEBUG]` prints and the anonymous open menu removed. |
+| 1 | Beemnet Yitayh Endalew | SIT-ST-2029-00046 |
+| 2 | Bereket Legesse Haile | SIT-ST-2029-00054 |
+| 3 | Meron Wondwosen Kebede | SIT-ST-2029-00110 |
+| 4 | Ramadan Genemo Ararso | SIT-ST-2029-00067 |
+| 5 | Tamrialesh Eshetu Tadesse | SIT-ST-2029-00128 |
+| 6 | Eyosiyas Belete Demozie | SIT-ST-2029-00126 |
